@@ -174,16 +174,20 @@ async def main() -> None:
     log.info("Target : %s", TARGET_CHAN)
 
     await client.start(phone=PHONE)
-    await client.get_dialogs(limit=None)
-    await asyncio.sleep(2)
+    source_entity = None
+    async for dialog in client.iter_dialogs():
+        did = str(dialog.id)
+        chan = SOURCE_CHAN.lstrip("-")
+        if did.lstrip("-") == chan or did == chan or did == chan.lstrip("100"):
+            source_entity = dialog.entity
+            break
 
-    try:
-        source_entity = await client.get_entity(SOURCE_CHAN)
-        log.info("✅ Listening to: %s", SOURCE_CHAN)
-    except Exception as e:
-        log.critical("❌ Could not resolve source channel %s: %s", SOURCE_CHAN, e)
+    if not source_entity:
+        log.critical("❌ Could not find source channel %s in dialogs", SOURCE_CHAN)
         return
 
+    log.info("✅ Listening to: %s", SOURCE_CHAN)
+    await asyncio.sleep(1)
     client.add_event_handler(
         handle_new_message,
         events.NewMessage(chats=[source_entity])
