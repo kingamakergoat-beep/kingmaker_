@@ -174,7 +174,7 @@ async def main() -> None:
     log.info("Target : %s", TARGET_CHAN)
 
     await client.start(phone=PHONE)
-    await client.get_dialogs(limit=200)
+    await client.get_dialogs(limit=None)
     await asyncio.sleep(2)
 
     try:
