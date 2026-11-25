@@ -104,15 +104,7 @@ def is_toss_message(text: str) -> bool:
     return has_phrase and has_decision and (has_tick or has_first)
 
 # ─────────────────────────────────────────────
-# 4. Format output
-# ─────────────────────────────────────────────
-def _format_output(text: str) -> str:
-    clean = text.strip().replace("*", "")
-    clean = " ".join(clean.split())
-    return f"<b>{clean}</b>"
-
-# ─────────────────────────────────────────────
-# 5. Client
+# 4. Client
 # ─────────────────────────────────────────────
 client = TelegramClient(
     SESSION_NAME,
@@ -124,26 +116,26 @@ client = TelegramClient(
 )
 
 # ─────────────────────────────────────────────
-# 6. Send helper (runs in background)
+# 5. Send helper — new message, exact copy,
+#    no forwarding attribution shown to viewers
 # ─────────────────────────────────────────────
-async def _send(formatted: str) -> None:
+async def _send(message) -> None:
     try:
         await client.send_message(
             entity=TARGET_CHAN,
-            message=formatted,
-            parse_mode="html",
+            message=message.text,
+            formatting_entities=message.entities,  # preserve original bold/formatting
         )
-        log.info("✅ Sent at %s: %s", datetime.now().isoformat(timespec="seconds"), formatted[:80])
+        log.info("✅ Sent at %s", datetime.now().isoformat(timespec="seconds"))
     except Exception as exc:
         log.error("❌ Send error: %s", exc)
 
 # ─────────────────────────────────────────────
-# 7. Handler — no entity lookup, filter by ID
+# 6. Handler
 # ─────────────────────────────────────────────
-SOURCE_ID: int = 0   # set in main() after parsing SOURCE_CHAN
+SOURCE_ID: int = 0
 
 async def handle_new_message(event: events.NewMessage.Event) -> None:
-    # Fast numeric check — no entity resolution needed
     if event.chat_id != SOURCE_ID:
         return
 
@@ -163,10 +155,10 @@ async def handle_new_message(event: events.NewMessage.Event) -> None:
     _mark_seen(toss_key)
 
     # Fire and forget — handler returns immediately
-    asyncio.create_task(_send(_format_output(text)))
+    asyncio.create_task(_send(event.message))
 
 # ─────────────────────────────────────────────
-# 8. Main
+# 7. Main
 # ─────────────────────────────────────────────
 async def main() -> None:
     global SOURCE_ID
@@ -175,7 +167,6 @@ async def main() -> None:
         log.critical("Missing config. Need API_ID, API_HASH, PHONE, SOURCE_CHANNEL, TARGET_CHANNEL in .env")
         return
 
-    # Parse numeric channel ID from SOURCE_CHANNEL env var
     try:
         SOURCE_ID = int(SOURCE_CHAN)
     except ValueError:
@@ -188,8 +179,7 @@ async def main() -> None:
 
     await client.start(phone=PHONE)
 
-    # Register handler on ALL messages — filter by chat_id inside handler.
-    # No entity lookup, no dialog scan — bot is live instantly after login.
+    # Listen to ALL messages, filter by chat_id — no startup scan needed
     client.add_event_handler(handle_new_message, events.NewMessage())
 
     log.info("🟢 Ready. Listening on chat_id=%s. Dedup window: %d min.", SOURCE_ID, DEDUP_EXPIRY_SECS // 60)
